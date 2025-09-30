@@ -1,12 +1,24 @@
 #include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+
+// Struct para separar os valores
+struct partition {
+  bool is_boot;
+  char start_chs_bytes[3];
+  char partition_type_byte;
+  char end_chs_bytes[3];
+  char start_sector_bytes[4];
+  char partition_size_bytes[4];
+};
 
 int main() {
   FILE *file_pointer = NULL;
   char buffer[512];
   int file_size;
+  struct partition partitions[4];
 
   // Abre o arquivo
   file_pointer = fopen("mbr.bin", "r");
@@ -36,18 +48,49 @@ int main() {
   int indexes_to_read = 0;
   for (int i = 0; i < partitions_count; i++) {
     printf("Partição %d: ", i + 1);
-    for (int j = start + indexes_to_read; j < start + indexes_to_read + 16;
-         j++) {
-      printf("%x ", buffer[j]);
+    int start_point = start + indexes_to_read;
+    for (int j = start_point; j < start_point + 16; j++) {
+      // i_byte sempre será entre 0 e 15 (16 bytes)
+      int i_byte = j - start_point;
+      char current_buffer = buffer[j];
+      printf("%hhx ", current_buffer);
+      // Partição bootável
+      if (j == start_point) {
+        partitions[i].is_boot = current_buffer == *"\x80";
+      }
+
+      // CHS incial
+      if (i_byte >= 1 && i_byte <= 3) {
+        partitions[i].start_chs_bytes[i_byte - 1] = current_buffer;
+      }
+
+      // Tipo de partição
+      if (i_byte == 4) {
+        partitions[i].partition_type_byte = current_buffer;
+      }
+
+      // CHS final
+      if (i_byte >= 5 && i_byte <= 7) {
+        partitions[i].end_chs_bytes[i_byte - 5] = current_buffer;
+      }
+
+      // Setor inicial
+      if (i_byte >= 8 && i_byte <= 11) {
+        partitions[i].start_sector_bytes[i_byte - 8] = current_buffer;
+      }
+
+      // Tamanho da partição
+      if (i_byte >= 12 && i_byte <= 15) {
+        partitions[i].partition_size_bytes[i_byte - 12] = current_buffer;
+      }
     }
     indexes_to_read += 16;
     printf("\n");
   }
-  // for (int i = start; i <= end; i++) {
-  //   printf("%x ", buffer[i]);
-  // }
 
   // Fecha o arquivo
   fclose(file_pointer);
   return 0;
 }
+
+// 11414
